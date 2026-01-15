@@ -29,12 +29,12 @@ const graphRelationsSchema = z.object({
 
 // Validation schema for creating a decision
 export const createDecisionSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().min(1),                    // Accept any string ID (e.g., "decision-uuid")
   objective: z.string().min(1),
   command: z.string().min(1),
-  raw_output_hash: z.string().length(64), // SHA-256 is 64 hex chars
+  raw_output_hash: z.string().min(1),       // Accept any hash format
   recommendation: z.string().min(1),
-  confidence: z.enum(['HIGH', 'MEDIUM', 'LOW']),
+  confidence: z.string().min(1),            // Accept freeform confidence (e.g., "LOW - Insufficient data")
   signals: signalsSchema,
   embedding_text: z.string().min(1),
   graph_relations: graphRelationsSchema,
@@ -166,11 +166,11 @@ export async function getDecisionHandler(
   try {
     const { id } = req.params;
 
-    // Validate UUID format
-    if (!z.string().uuid().safeParse(id).success) {
+    // Validate ID is not empty
+    if (!id || id.trim().length === 0) {
       res.status(400).json({
         error: 'validation_error',
-        message: 'Invalid decision ID format (must be UUID)',
+        message: 'Decision ID is required',
         correlationId,
       });
       return;

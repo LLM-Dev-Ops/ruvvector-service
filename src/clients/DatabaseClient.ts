@@ -107,14 +107,31 @@ export class DatabaseClient {
       `);
 
       // Create decisions table if it doesn't exist
+      // Note: Using TEXT for id and confidence to support flexible formats from agentics-cli
+      // First, try to drop the old table with UUID constraints (dev environment migration)
+      try {
+        // Check if old table exists with UUID type and drop it
+        const tableCheck = await this.pool.query(`
+          SELECT data_type FROM information_schema.columns
+          WHERE table_name = 'decisions' AND column_name = 'id'
+        `);
+        if (tableCheck.rows.length > 0 && tableCheck.rows[0].data_type === 'uuid') {
+          logger.info('Migrating decisions table from UUID to TEXT schema');
+          await this.pool.query('DROP TABLE IF EXISTS approvals CASCADE');
+          await this.pool.query('DROP TABLE IF EXISTS decisions CASCADE');
+        }
+      } catch (migrationError) {
+        logger.warn({ error: migrationError }, 'Migration check failed, continuing');
+      }
+
       await this.pool.query(`
         CREATE TABLE IF NOT EXISTS decisions (
-          id UUID PRIMARY KEY,
+          id TEXT PRIMARY KEY,
           objective TEXT NOT NULL,
-          command VARCHAR(255) NOT NULL,
-          raw_output_hash VARCHAR(64) NOT NULL,
+          command TEXT NOT NULL,
+          raw_output_hash TEXT NOT NULL,
           recommendation TEXT NOT NULL,
-          confidence VARCHAR(10) NOT NULL CHECK (confidence IN ('HIGH', 'MEDIUM', 'LOW')),
+          confidence TEXT NOT NULL,
           signals JSONB NOT NULL,
           embedding_text TEXT NOT NULL,
           embedding JSONB,
@@ -140,7 +157,7 @@ export class DatabaseClient {
       await this.pool.query(`
         CREATE TABLE IF NOT EXISTS approvals (
           id UUID PRIMARY KEY,
-          decision_id UUID NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+          decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
           approved BOOLEAN NOT NULL,
           confidence_adjustment DOUBLE PRECISION,
           reward DOUBLE PRECISION NOT NULL,

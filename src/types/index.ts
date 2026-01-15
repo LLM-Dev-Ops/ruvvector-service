@@ -347,8 +347,6 @@ export interface DeleteDeploymentResponse {
 // Decisions Storage Interfaces (Executive Synthesis)
 // ============================================================================
 
-export type DecisionConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
-
 export interface DecisionSignals {
   financial: string;           // Financial assessment summary
   risk: string;                // Risk assessment summary
@@ -367,7 +365,7 @@ export interface DecisionRecord {
   command: string;                      // e.g., "agentics simulate"
   raw_output_hash: string;              // SHA-256 hash of simulation JSON
   recommendation: string;               // "PROCEED: ...", "DEFER: ...", etc.
-  confidence: DecisionConfidence;       // "HIGH", "MEDIUM", "LOW"
+  confidence: string;                   // Freeform confidence (e.g., "LOW - Insufficient data")
   signals: DecisionSignals;
   embedding_text: string;               // Text for vector embedding
   embedding?: number[] | null;          // Vector embedding (optional)
@@ -381,7 +379,7 @@ export interface CreateDecisionRequest {
   command: string;
   raw_output_hash: string;
   recommendation: string;
-  confidence: DecisionConfidence;
+  confidence: string;
   signals: DecisionSignals;
   embedding_text: string;
   graph_relations: DecisionGraphRelations;

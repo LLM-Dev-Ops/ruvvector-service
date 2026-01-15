@@ -18,7 +18,7 @@ const LEARNING_RATE = 0.1;
 
 // Validation schema for approval event
 export const createApprovalSchema = z.object({
-  decision_id: z.string().uuid(),
+  decision_id: z.string().min(1),           // Accept any string ID format
   approved: z.boolean(),
   confidence_adjustment: z.number().min(-1).max(1).optional(),
   timestamp: z.string().optional(),
