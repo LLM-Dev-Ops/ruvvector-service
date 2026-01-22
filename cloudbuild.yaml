@@ -1,0 +1,39 @@
+# Cloud Build configuration for ruvvector-service
+# Trigger this with: gcloud builds submit --config=cloudbuild.yaml
+
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/ruvvector/ruvvector-service:$COMMIT_SHA', '.']
+    id: 'Build'
+
+  # Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/$PROJECT_ID/ruvvector/ruvvector-service:$COMMIT_SHA']
+    id: 'Push'
+    waitFor: ['Build']
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ruvvector-service'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/ruvvector/ruvvector-service:$COMMIT_SHA'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--memory=256Mi'
+      - '--set-env-vars=NODE_ENV=production,PORT=8080,LOG_LEVEL=info'
+      - '--set-secrets=RUVVECTOR_DB_HOST=RUVECTOR_DB_HOST:latest,RUVVECTOR_DB_PORT=RUVECTOR_DB_PORT:latest,RUVVECTOR_DB_NAME=RUVECTOR_DB_NAME:latest,RUVVECTOR_DB_USER=RUVECTOR_DB_USER:latest,RUVVECTOR_DB_PASSWORD=RUVECTOR_DB_PASSWORD:latest'
+      - '--add-cloudsql-instances=ruv-cloud:us-central1:ruvector-postgres'
+    id: 'Deploy'
+    waitFor: ['Push']
+
+# Use Artifact Registry
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/ruvvector/ruvvector-service:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
