@@ -43,6 +43,10 @@ import {
   listDecisionsHandler,
 } from './handlers/decisions';
 import { createApprovalHandler } from './handlers/approvals';
+import {
+  createApprovalLearningHandler,
+  createFeedbackAssimilationHandler,
+} from './handlers/learning';
 
 /**
  * Request metrics middleware - SPARC compliant
@@ -177,6 +181,51 @@ function createApp(vectorClient: VectorClient, dbClient: DatabaseClient): Applic
   // POST /decision/approval - Process approval event and apply learning
   app.post('/decision/approval', (req, res, next) => {
     createApprovalHandler(req, res, dbClient).catch(next);
+  });
+
+  // ============================================================================
+  // Learning Signal Agents API - PROMPT 0 Compliant
+  // ============================================================================
+
+  // POST /learning/learn - Approval Learning Agent (CLI-invokable)
+  app.post('/learning/learn', (req, res, next) => {
+    createApprovalLearningHandler(req, res, dbClient).catch(next);
+  });
+
+  // POST /learning/assimilate - Feedback Assimilation Agent (CLI-invokable)
+  app.post('/learning/assimilate', (req, res, next) => {
+    createFeedbackAssimilationHandler(req, res, dbClient).catch(next);
+  });
+
+  // GET /learning/inspect - Inspect learning events (read-only)
+  app.get('/learning/inspect', async (req, res, next) => {
+    try {
+      const { limit = '50', offset = '0', decision_type } = req.query;
+      const parsedLimit = Math.min(Math.max(parseInt(limit as string, 10) || 50, 1), 1000);
+      const parsedOffset = Math.max(parseInt(offset as string, 10) || 0, 0);
+
+      let query = `SELECT id, agent_id, agent_version, decision_type, inputs_hash, outputs, confidence, constraints_applied, source_id, source_type, created_at FROM learning_events`;
+      const params: unknown[] = [];
+
+      if (decision_type) {
+        query += ` WHERE decision_type = $1`;
+        params.push(decision_type);
+      }
+
+      query += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(parsedLimit, parsedOffset);
+
+      const result = await dbClient.query(query, params);
+
+      res.status(200).json({
+        data: result.rows,
+        total: result.rowCount,
+        limit: parsedLimit,
+        offset: parsedOffset,
+      });
+    } catch (error) {
+      next(error);
+    }
   });
 
   // ============================================================================

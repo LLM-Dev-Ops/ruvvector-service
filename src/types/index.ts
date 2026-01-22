@@ -442,3 +442,112 @@ export interface CreateApprovalResponse {
   weights_updated: number;
   learning_applied: boolean;
 }
+
+// ============================================================================
+// Learning Decision Event Interfaces (PROMPT 0 - Learning Signal Agents)
+// ============================================================================
+
+export interface LearningDecisionEvent {
+  agent_id: string;                             // Required, agent identifier
+  agent_version: string;                        // Required, agent version
+  decision_type: 'approval_learning' | 'feedback_assimilation';
+  inputs_hash: string;                          // SHA-256 of inputs
+  outputs: object;                              // Learning outputs
+  confidence: number;                           // 0-1 learning signal strength
+  constraints_applied: object;                  // Review scope, artifact type, reviewer role
+  execution_ref: string;                        // Execution reference
+  timestamp: string;                            // UTC ISO 8601
+}
+
+export interface ApprovalLearningEvent extends LearningDecisionEvent {
+  decision_type: 'approval_learning';
+  source_decision_id: string;                   // Original decision ID
+  approved: boolean;                            // Approval outcome
+  reviewer_outcome: 'approved' | 'rejected' | 'deferred';
+  normalized_signal: number;                    // -1 to +1
+  signal_metadata: {
+    reviewer_role: string;
+    review_scope: string;
+    artifact_type: string;
+  };
+}
+
+export interface FeedbackAssimilationEvent extends LearningDecisionEvent {
+  decision_type: 'feedback_assimilation';
+  source_artifact_id: string;                   // Source artifact ID
+  feedback_type: 'qualitative' | 'quantitative' | 'mixed';
+  raw_feedback: string;                         // Raw feedback content
+  normalized_signals: Array<{
+    dimension: string;
+    value: number;
+    confidence: number;
+  }>;
+  assimilation_metadata: {
+    feedback_source: string;
+    processing_method: string;
+  };
+}
+
+export interface CreateApprovalLearningRequest {
+  agent_id: string;
+  agent_version: string;
+  source_decision_id: string;
+  approved: boolean;
+  reviewer_outcome: 'approved' | 'rejected' | 'deferred';
+  normalized_signal: number;
+  signal_metadata: {
+    reviewer_role: string;
+    review_scope: string;
+    artifact_type: string;
+  };
+  outputs: object;
+  confidence: number;
+  constraints_applied: object;
+  execution_ref: string;
+  inputs_hash: string;
+  timestamp?: string;
+}
+
+export interface CreateApprovalLearningResponse {
+  id: string;
+  agent_id: string;
+  decision_type: 'approval_learning';
+  source_decision_id: string;
+  normalized_signal: number;
+  created: boolean;
+  timestamp: string;
+}
+
+export interface CreateFeedbackAssimilationRequest {
+  agent_id: string;
+  agent_version: string;
+  source_artifact_id: string;
+  feedback_type: 'qualitative' | 'quantitative' | 'mixed';
+  raw_feedback: string;
+  normalized_signals: Array<{
+    dimension: string;
+    value: number;
+    confidence: number;
+  }>;
+  assimilation_metadata: {
+    feedback_source: string;
+    processing_method: string;
+  };
+  outputs: object;
+  confidence: number;
+  constraints_applied: object;
+  execution_ref: string;
+  inputs_hash: string;
+  timestamp?: string;
+}
+
+export interface CreateFeedbackAssimilationResponse {
+  id: string;
+  agent_id: string;
+  decision_type: 'feedback_assimilation';
+  source_artifact_id: string;
+  feedback_type: 'qualitative' | 'quantitative' | 'mixed';
+  normalized_signals_count: number;
+  created: boolean;
+  timestamp: string;
+}

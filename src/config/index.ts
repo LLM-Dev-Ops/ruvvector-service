@@ -92,7 +92,7 @@ export const config: Config = {
   port: getEnvNumber('PORT', 3000),
   logLevel: getEnvVar('LOG_LEVEL', 'info'),
 
-  // RuvVector connection - RUVVECTOR_SERVICE_URL is REQUIRED (fail-fast)
+  // RuvVector connection - RUVVECTOR_SERVICE_URL with default for local dev
   ruvVector: {
     serviceUrl: getEnvVar('RUVVECTOR_SERVICE_URL', 'http://localhost:6379'),
     apiKey: getOptionalEnvVar('RUVVECTOR_API_KEY'),
@@ -102,15 +102,15 @@ export const config: Config = {
 
   // PostgreSQL Database configuration (for plans storage)
   database: {
-    host: getEnvVar('RUVECTOR_DB_HOST', 'localhost'),
-    port: getEnvNumber('RUVECTOR_DB_PORT', 5432),
-    name: getEnvVar('RUVECTOR_DB_NAME', 'ruvector-postgres'),
-    user: getEnvVar('RUVECTOR_DB_USER', 'postgres'),
-    password: getEnvVar('RUVECTOR_DB_PASSWORD', ''),
-    maxConnections: getEnvNumber('RUVECTOR_DB_MAX_CONNECTIONS', 20),
-    idleTimeoutMs: getEnvNumber('RUVECTOR_DB_IDLE_TIMEOUT', 30000),
-    connectionTimeoutMs: getEnvNumber('RUVECTOR_DB_CONNECTION_TIMEOUT', 10000),
-    ssl: getEnvBoolean('RUVECTOR_DB_SSL', false),
+    host: getEnvVar('RUVVECTOR_DB_HOST', 'localhost'),
+    port: getEnvNumber('RUVVECTOR_DB_PORT', 5432),
+    name: getEnvVar('RUVVECTOR_DB_NAME', 'ruvector-postgres'),
+    user: getEnvVar('RUVVECTOR_DB_USER', 'postgres'),
+    password: getEnvVar('RUVVECTOR_DB_PASSWORD', ''),
+    maxConnections: getEnvNumber('RUVVECTOR_DB_MAX_CONNECTIONS', 20),
+    idleTimeoutMs: getEnvNumber('RUVVECTOR_DB_IDLE_TIMEOUT', 30000),
+    connectionTimeoutMs: getEnvNumber('RUVVECTOR_DB_CONNECTION_TIMEOUT', 10000),
+    ssl: getEnvBoolean('RUVVECTOR_DB_SSL', false),
   },
 
   // Circuit breaker

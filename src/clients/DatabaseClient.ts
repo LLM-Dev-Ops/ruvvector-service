@@ -202,6 +202,92 @@ export class DatabaseClient {
         CREATE INDEX IF NOT EXISTS idx_learning_weights_weight ON learning_weights(weight DESC)
       `);
 
+      // Create learning_events table for storing all DecisionEvents from agents
+      // This is an append-only audit table - records are never updated or deleted
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS learning_events (
+          id UUID PRIMARY KEY,
+          agent_id VARCHAR(100) NOT NULL,
+          agent_version VARCHAR(50) NOT NULL,
+          decision_type VARCHAR(50) NOT NULL CHECK (decision_type IN ('approval_learning', 'feedback_assimilation')),
+          inputs_hash VARCHAR(64) NOT NULL,
+          outputs JSONB NOT NULL,
+          confidence DOUBLE PRECISION NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+          constraints_applied JSONB NOT NULL,
+          execution_ref VARCHAR(255),
+          source_id VARCHAR(255),
+          source_type VARCHAR(50),
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      // Create learning_decision_events table for feedback assimilation agent
+      // This is an append-only audit table - records are never updated or deleted
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS learning_decision_events (
+          id UUID PRIMARY KEY,
+          event_type VARCHAR(50) NOT NULL DEFAULT 'learning_decision',
+          agent_id VARCHAR(100) NOT NULL,
+          agent_version VARCHAR(50) NOT NULL,
+          decision_type VARCHAR(50) NOT NULL CHECK (decision_type IN ('feedback_assimilation', 'approval_learning', 'pattern_recognition')),
+          inputs JSONB NOT NULL,
+          inputs_hash VARCHAR(64) NOT NULL,
+          outputs JSONB NOT NULL,
+          confidence DOUBLE PRECISION NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+          constraints_applied JSONB NOT NULL,
+          timestamp TIMESTAMPTZ NOT NULL,
+          correlation_id VARCHAR(100) NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      // Create indexes for learning_events
+      await this.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_learning_events_agent_id ON learning_events(agent_id)
+      `);
+
+      await this.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_learning_events_decision_type ON learning_events(decision_type)
+      `);
+
+      await this.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_learning_events_created_at ON learning_events(created_at DESC)
+      `);
+
+      await this.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_learning_events_source ON learning_events(source_type, source_id)
+      `);
+
+      await this.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_learning_events_inputs_hash ON learning_events(inputs_hash)
+      `);
+
+      // Unique index on inputs_hash for idempotency (ON CONFLICT support)
+      await this.pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_learning_events_inputs_hash_unique ON learning_events(inputs_hash)
+      `);
+
+      // Create indexes for learning_decision_events
+      await this.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_learning_decision_events_agent_id ON learning_decision_events(agent_id)
+      `);
+
+      await this.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_learning_decision_events_decision_type ON learning_decision_events(decision_type)
+      `);
+
+      await this.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_learning_decision_events_inputs_hash ON learning_decision_events(inputs_hash, decision_type)
+      `);
+
+      await this.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_learning_decision_events_timestamp ON learning_decision_events(timestamp DESC)
+      `);
+
+      await this.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_learning_decision_events_created_at ON learning_decision_events(created_at DESC)
+      `);
+
       this.initialized = true;
       logger.info('Database initialized successfully');
     } catch (error) {

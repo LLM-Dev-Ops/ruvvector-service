@@ -67,15 +67,16 @@ describe('Configuration - SPARC Compliant', () => {
     expect(config.shutdown.timeout).toBeGreaterThan(0);
   });
 
-  describe('Fail-fast behavior', () => {
-    it('should throw error when RUVVECTOR_SERVICE_URL is missing', () => {
+  describe('Default value behavior', () => {
+    it('should use default RUVVECTOR_SERVICE_URL when not provided', () => {
       const originalUrl = process.env.RUVVECTOR_SERVICE_URL;
       delete process.env.RUVVECTOR_SERVICE_URL;
 
-      expect(() => {
-        jest.resetModules();
-        require('../../src/config');
-      }).toThrow(/RUVVECTOR_SERVICE_URL/);
+      jest.resetModules();
+      const { config: testConfig } = require('../../src/config');
+
+      // Should use default value instead of throwing
+      expect(testConfig.ruvVector.serviceUrl).toBe('http://localhost:6379');
 
       // Restore
       process.env.RUVVECTOR_SERVICE_URL = originalUrl;
