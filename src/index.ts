@@ -81,7 +81,20 @@ function metricsMiddleware(req: Request, res: Response, next: NextFunction): voi
 function createApp(vectorClient: VectorClient, dbClient: DatabaseClient): Application {
   const app = express();
 
-  // Basic middleware
+  // ============================================================================
+  // CRITICAL: Tolerant polling endpoint MUST be registered BEFORE global middleware
+  // This ensures validateInternalPolling runs FIRST, before express.json() can reject
+  // requests with missing/malformed bodies or headers.
+  // ============================================================================
+
+  // GET /events/decisions - Fetch decision events for execution engines
+  // MUST be registered BEFORE express.json() to avoid 400 errors from body parsing
+  // Safe for: stateless polling, first-time consumers, cursor-less requests, missing headers
+  app.get('/events/decisions', validateInternalPolling, (req, res, next) => {
+    listDecisionEventsHandler(req, res, dbClient).catch(next);
+  });
+
+  // Basic middleware (applied to all OTHER routes)
   app.use(express.json({ limit: '10mb' }));
 
   // Metrics middleware for all requests
@@ -238,21 +251,10 @@ function createApp(vectorClient: VectorClient, dbClient: DatabaseClient): Applic
   });
 
   // ============================================================================
-  // Decision Events API - Execution Engine Consumption Endpoint
-  // Allows downstream execution engines to poll for approved plans and events
-  // ============================================================================
-
-  // GET /events/decisions - Fetch decision events for execution engines
-  // Query params: types (comma-separated), after (cursor), limit
-  // Uses tolerant middleware for internal polling (auto-generates missing headers)
-  // Safe for: stateless polling, first-time consumers, cursor-less requests
-  app.get('/events/decisions', validateInternalPolling, (req, res, next) => {
-    listDecisionEventsHandler(req, res, dbClient).catch(next);
-  });
-
-  // ============================================================================
   // Legacy API endpoints (require x-correlation-id and x-entitlement-context headers)
   // ============================================================================
+  // NOTE: GET /events/decisions is registered BEFORE express.json() at the top
+  // of createApp() to ensure tolerant middleware runs first.
 
   // SPARC: POST /ingest - Accept normalized events
   app.post(
