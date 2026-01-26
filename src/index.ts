@@ -18,7 +18,7 @@ import { configureLatencyBudget, learningLatencyMiddleware } from './middleware/
 import { assertHistoricalDataIntegrity } from './guards/immutability';
 
 // Middleware
-import { validateRequiredHeaders, validateRequest, ingestSchema, querySchema, simulateSchema } from './middleware/validation';
+import { validateRequiredHeaders, validateInternalPolling, validateRequest, ingestSchema, querySchema, simulateSchema } from './middleware/validation';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 // Handlers
@@ -244,8 +244,9 @@ function createApp(vectorClient: VectorClient, dbClient: DatabaseClient): Applic
 
   // GET /events/decisions - Fetch decision events for execution engines
   // Query params: types (comma-separated), after (cursor), limit
-  // Authentication required via x-correlation-id and x-entitlement-context headers
-  app.get('/events/decisions', validateRequiredHeaders, (req, res, next) => {
+  // Uses tolerant middleware for internal polling (auto-generates missing headers)
+  // Safe for: stateless polling, first-time consumers, cursor-less requests
+  app.get('/events/decisions', validateInternalPolling, (req, res, next) => {
     listDecisionEventsHandler(req, res, dbClient).catch(next);
   });
 

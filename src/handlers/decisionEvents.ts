@@ -59,18 +59,63 @@ const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 1000;
 
 /**
- * Parse comma-separated event types filter
+ * Default event types for polling (execution engines primarily care about approved plans)
  */
-function parseEventTypes(typesParam: string | undefined): DecisionEventType[] | null {
-  if (!typesParam || typeof typesParam !== 'string') {
-    return null;
+const DEFAULT_EVENT_TYPES: DecisionEventType[] = ['plan_approved'];
+
+/**
+ * All valid event types
+ */
+const VALID_EVENT_TYPES: DecisionEventType[] = ['plan_created', 'plan_approved', 'plan_rejected', 'plan_deferred'];
+
+/**
+ * Sanitize query parameter - handles null, undefined, empty string, arrays
+ * Returns undefined for empty/invalid values, string otherwise
+ */
+function sanitizeQueryParam(param: unknown): string | undefined {
+  if (param === null || param === undefined) return undefined;
+  if (Array.isArray(param)) {
+    // Take first element if array
+    const first = param[0];
+    if (typeof first === 'string' && first.trim().length > 0) {
+      return first.trim();
+    }
+    return undefined;
+  }
+  if (typeof param === 'string') {
+    const trimmed = param.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Parse comma-separated event types filter
+ * Returns DEFAULT_EVENT_TYPES if param is missing/empty/invalid
+ * Ignores unknown types (does not fail)
+ */
+function parseEventTypes(typesParam: unknown): DecisionEventType[] {
+  const sanitized = sanitizeQueryParam(typesParam);
+
+  // Default to plan_approved if no types specified
+  if (!sanitized) {
+    return DEFAULT_EVENT_TYPES;
   }
 
-  const validTypes: DecisionEventType[] = ['plan_created', 'plan_approved', 'plan_rejected', 'plan_deferred'];
-  const requestedTypes = typesParam.split(',').map(t => t.trim().toLowerCase());
-  const filteredTypes = requestedTypes.filter(t => validTypes.includes(t as DecisionEventType)) as DecisionEventType[];
+  const requestedTypes = sanitized.split(',').map(t => t.trim().toLowerCase());
+  const filteredTypes = requestedTypes.filter(t => VALID_EVENT_TYPES.includes(t as DecisionEventType)) as DecisionEventType[];
 
-  return filteredTypes.length > 0 ? filteredTypes : null;
+  // If all requested types were invalid, return default
+  return filteredTypes.length > 0 ? filteredTypes : DEFAULT_EVENT_TYPES;
+}
+
+/**
+ * Parse cursor parameter - tolerant of missing/empty/invalid values
+ * Returns null for first poll (no cursor filtering applied)
+ */
+function sanitizeCursor(afterParam: unknown): string | null {
+  const sanitized = sanitizeQueryParam(afterParam);
+  return sanitized || null;
 }
 
 /**
@@ -99,30 +144,41 @@ export async function listDecisionEventsHandler(
   res: Response,
   dbClient: DatabaseClient
 ): Promise<void> {
-  const correlationId = getOrCreateCorrelationId(req.headers);
+  // Use correlation ID from request (set by middleware) or generate one
+  const correlationId = req.correlationId || getOrCreateCorrelationId(req.headers);
   res.setHeader('x-correlation-id', correlationId);
 
   try {
     const { types, after, limit } = req.query;
 
-    // Parse and validate limit
+    // =========================================================================
+    // QUERY PARAM SANITIZATION (tolerant of missing/empty/invalid values)
+    // =========================================================================
+
+    // Parse and validate limit (default 100, max 1000)
+    const sanitizedLimit = sanitizeQueryParam(limit);
     const parsedLimit = Math.min(
-      Math.max(parseInt(limit as string, 10) || DEFAULT_LIMIT, 1),
+      Math.max(parseInt(sanitizedLimit || '', 10) || DEFAULT_LIMIT, 1),
       MAX_LIMIT
     );
 
-    // Parse event types filter
-    const eventTypes = parseEventTypes(types as string);
+    // Parse event types filter (defaults to ['plan_approved'] if missing/empty)
+    const eventTypes = parseEventTypes(types);
 
-    // Build unified query to fetch events from both decisions and approvals tables
-    // Events are ordered by created_at ASC for stable polling
+    // Sanitize cursor (null = first poll, no filtering)
+    const cursor = sanitizeCursor(after);
+
+    // =========================================================================
+    // BUILD QUERY (safe for first poll and cursor-based continuation)
+    // =========================================================================
+
     const events: DecisionEvent[] = [];
 
-    // Determine which event types to query
-    const includeCreated = !eventTypes || eventTypes.includes('plan_created');
-    const includeApproved = !eventTypes || eventTypes.includes('plan_approved');
-    const includeRejected = !eventTypes || eventTypes.includes('plan_rejected');
-    const includeDeferred = !eventTypes || eventTypes.includes('plan_deferred');
+    // Determine which event types to query based on parsed types
+    const includeCreated = eventTypes.includes('plan_created');
+    const includeApproved = eventTypes.includes('plan_approved');
+    const includeRejected = eventTypes.includes('plan_rejected');
+    const includeDeferred = eventTypes.includes('plan_deferred');
 
     // Query for plan_created events from decisions table
     if (includeCreated) {
@@ -142,8 +198,9 @@ export async function listDecisionEventsHandler(
       let paramIndex = 1;
 
       // Apply cursor filter if provided (cursor is composite: type:id:timestamp)
-      if (after && typeof after === 'string') {
-        const cursorParts = parseCursor(after);
+      // If cursor is null/missing, this is a first poll - return earliest events
+      if (cursor) {
+        const cursorParts = parseCursor(cursor);
         if (cursorParts) {
           decisionsQuery += ` WHERE (created_at, id) > ($${paramIndex}, $${paramIndex + 1})`;
           decisionsParams.push(cursorParts.timestamp, cursorParts.id);
@@ -212,8 +269,9 @@ export async function listDecisionEventsHandler(
       }
 
       // Apply cursor filter if provided
-      if (after && typeof after === 'string') {
-        const cursorParts = parseCursor(after);
+      // If cursor is null/missing, this is a first poll - return earliest events
+      if (cursor) {
+        const cursorParts = parseCursor(cursor);
         if (cursorParts) {
           conditions.push(`(a.created_at, a.id::text) > ($${paramIndex}, $${paramIndex + 1})`);
           approvalsParams.push(cursorParts.timestamp, cursorParts.id);
@@ -280,9 +338,10 @@ export async function listDecisionEventsHandler(
         correlationId,
         eventCount: trimmedEvents.length,
         types: eventTypes,
-        after,
+        cursor,
         limit: parsedLimit,
         nextCursor,
+        isFirstPoll: !cursor,
       },
       'Decision events retrieved successfully'
     );

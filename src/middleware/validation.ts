@@ -175,11 +175,59 @@ export const simulateSchema = z.object({
   includeVectors: z.boolean().optional(),
 });
 
+/**
+ * Tolerant middleware for internal polling endpoints (e.g., execution engine listeners)
+ *
+ * This middleware is SAFE for:
+ * - Stateless polling
+ * - First-time consumers
+ * - Internal execution engines
+ * - Cursor-less initial requests
+ *
+ * If headers are missing, it auto-generates defaults instead of failing.
+ * Authorization is still validated if present.
+ */
+export function validateInternalPolling(req: Request, res: Response, next: NextFunction): void {
+  // Auto-generate correlation ID if missing
+  let correlationId = req.headers['x-correlation-id'];
+  if (!correlationId || typeof correlationId !== 'string') {
+    correlationId = getOrCreateCorrelationId(req.headers);
+  }
+  req.correlationId = correlationId;
+  res.setHeader('x-correlation-id', correlationId);
+
+  // Default entitlement context for internal services if missing
+  let entitlementContext = req.headers['x-entitlement-context'];
+  if (!entitlementContext || typeof entitlementContext !== 'string') {
+    // Default to system execution listener context
+    entitlementContext = Buffer.from(JSON.stringify({
+      tenant: 'system',
+      scope: 'execution-listener'
+    })).toString('base64');
+  }
+
+  // Validate entitlement if provided (or use default)
+  const result = checkEntitlement(entitlementContext);
+
+  if (!result.allowed) {
+    res.status(403).json({
+      error: 'entitlement_error',
+      message: result.reason || 'Entitlement check failed',
+      correlationId,
+    });
+    return;
+  }
+
+  req.entitlement = result;
+  next();
+}
+
 export default {
   validateRequest,
   extractCorrelationId,
   validateEntitlement,
   validateRequiredHeaders,
+  validateInternalPolling,
   ingestSchema,
   querySchema,
   simulateSchema,
