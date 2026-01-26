@@ -551,3 +551,40 @@ export interface CreateFeedbackAssimilationResponse {
   created: boolean;
   timestamp: string;
 }
+
+// ============================================================================
+// Decision Events API Interfaces (Execution Engine Consumption)
+// ============================================================================
+
+export type DecisionEventType =
+  | 'plan_created'
+  | 'plan_approved'
+  | 'plan_rejected'
+  | 'plan_deferred';
+
+export interface DecisionEventPayload {
+  plan_id?: string;
+  simulation_id?: string;
+  decision_id?: string;
+  objective?: string;
+  recommendation?: string;
+  confidence?: string;
+  reward?: number;
+  reviewer_outcome?: string;
+  command?: string;
+  checksum?: string;
+  confidence_adjustment?: number | null;
+  [key: string]: unknown;
+}
+
+export interface DecisionEvent {
+  id: string;
+  type: DecisionEventType;
+  timestamp: string;
+  payload: DecisionEventPayload;
+}
+
+export interface DecisionEventsResponse {
+  events: DecisionEvent[];
+  next_cursor: string | null;
+}

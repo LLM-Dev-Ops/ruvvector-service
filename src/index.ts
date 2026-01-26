@@ -52,6 +52,7 @@ import {
   createApprovalLearningHandler,
   createFeedbackAssimilationHandler,
 } from './handlers/learning';
+import { listDecisionEventsHandler } from './handlers/decisionEvents';
 
 /**
  * Request metrics middleware - SPARC compliant
@@ -234,6 +235,18 @@ function createApp(vectorClient: VectorClient, dbClient: DatabaseClient): Applic
     } catch (error) {
       next(error);
     }
+  });
+
+  // ============================================================================
+  // Decision Events API - Execution Engine Consumption Endpoint
+  // Allows downstream execution engines to poll for approved plans and events
+  // ============================================================================
+
+  // GET /events/decisions - Fetch decision events for execution engines
+  // Query params: types (comma-separated), after (cursor), limit
+  // Authentication required via x-correlation-id and x-entitlement-context headers
+  app.get('/events/decisions', validateRequiredHeaders, (req, res, next) => {
+    listDecisionEventsHandler(req, res, dbClient).catch(next);
   });
 
   // ============================================================================
